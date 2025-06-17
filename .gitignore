@@ -1,0 +1,7 @@
+*.o
+*.elf
+/scratch
+obj
+bin
+build
+.vscode
