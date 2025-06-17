@@ -115,8 +115,8 @@ echo "Dumping symbols section (with objdump)..." >> scratch/output/nm_main.txt
 riscv32-unknown-elf-objdump -t build/obj/src/main.o | sort >> scratch/output/nm_main.txt
 
 # Exporting programs files local to project
-executePython build/bin/main.elf build/bin/testLib.h testLib
-executePython --format sv build/bin/main.elf build/bin/testLib.svh testLib
+executePython build/bin/main.elf scratch/output/main.h testLib
+executePython --format sv build/bin/main.elf scratch/output/main.svh testLib
 
 # Se -f non è stato specificato, esporta main.elf come testLibProgram.h altrimenti esporta il file specificato
 if [ -z "$FILE" ]; then
