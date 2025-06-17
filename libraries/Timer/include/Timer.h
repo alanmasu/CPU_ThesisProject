@@ -39,6 +39,11 @@
 #define TIMER_US_TO_TIKS(us) ((us) * 40)
 #define TIMER_KHZ_TO_TIKS(khz) ((int)TIMER_US_TO_TIKS((500/khz)))
 
+#define TIMER_TIKS_TO_US(tiks) ((tiks) / 40)            ///< Convert tiks to microseconds
+#define TIMER_TIKS_TO_MS(tiks) ((tiks) / 40000)         ///< Convert tiks to milliseconds
+#define TIMER_TIKS_TO_SEC(tiks) ((tiks) / 40000000)     ///< Convert tiks to seconds
+
+
 typedef struct TimerCRegField_t {
     unsigned START : 1;          ///< Bit 0: Start bit
     unsigned STOP : 1;           ///< Bit 1: Stop bit
