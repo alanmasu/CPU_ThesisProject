@@ -39,7 +39,6 @@
 
 #define TIMES_NUM 9
 
-uint32_t times[TIMES_NUM] = {0}; 
 uint32_t timesIndex = 0;
 char labels[TIMES_NUM][100] = {
     "Allocazione",
@@ -55,6 +54,7 @@ char labels[TIMES_NUM][100] = {
 
 int main(int argc, char const *argv[]){
     printf("Starting code compiled at %s %s\n", __DATE__, __TIME__);
+    uint64_t* times = (uint64_t*)argv;
     const int B_M = 2;
     const int B_N = 3;
     const int B_K = 4;
@@ -146,10 +146,12 @@ int main(int argc, char const *argv[]){
         while(1);
     }
 
-    PRINTF_LOG("Label,TimerVal_tiks\n");
-    for (int i = 0; i < TIMES_NUM; ++i){
-        PRINTF_LOG("%s,%u\n", labels[i], times[i]);
-    }
+    // PRINTF_LOG("Label,TimerVal,UM,elapsedTime,tiks\n");
+    // for (int i = 0; i < TIMES_NUM; ++i){
+    //     PRINTF_LOG("%s,%u,tiks,%u,tiks\n", labels[i], times[i], i > 0 ? (times[i] - times[i - 1]) : times[i]);
+    // }
+    uint32_t* memBase = (uint32_t*)0x40010000;
+    memBase[0] = timesIndex;
 
     PRINTF_DBG("Setting BRAM Port to EXTERNAL...\n");
     BTPU0RegFile->creg.reg.BRAM_PORT_SEL = BTPU_BRAM_PORT_SEL_EXT; // Set BRAM port to external
