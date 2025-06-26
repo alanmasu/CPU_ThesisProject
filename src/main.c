@@ -184,6 +184,11 @@ int main(int argc, char const *argv[]){
         free(O);
         free(OSerial);
 
+        A = NULL;
+        W = NULL;
+        O = NULL;
+        OSerial = NULL;
+
         times[timesIndex++] = timerGetCounter(Timer0RegFile);
         timerStop(Timer0RegFile);
 
