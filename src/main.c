@@ -12,6 +12,7 @@
 #include <inttypes.h>
 
 #define PROFILING
+#define PRINT_RESULTS
 
 #if !defined(SIMULATION) && !defined(PROFILING)
     #define PRINTF_DBG(...) printf(__VA_ARGS__)
@@ -37,10 +38,16 @@
     #define PRINTF_LOG(...)
 #endif
 
+#define ITERATIONS 4
 #define TIMES_NUM 9
 
+uint64_t times[TIMES_NUM * ITERATIONS] = {0};
+uint32_t sizes[TIMES_NUM * ITERATIONS] = {0};
 uint32_t timesIndex = 0;
-char labels[TIMES_NUM][100] = {
+uint32_t testN = 0;
+
+#ifdef PRINT_RESULTS  
+char labels[TIMES_NUM][25] = {
     "Allocazione",
     "Popolazione",
     "Caricamento",
@@ -51,112 +58,141 @@ char labels[TIMES_NUM][100] = {
     "ComputazioneSerialeFast",
     "freeMemory"
 };
+#endif
+
+void printResults(){
+    #ifdef PRINT_RESULTS
+    printf("Label,size(bit),timestamp(tiks),timestamp(us),platform\n");
+    for(int i = 0; i < timesIndex / TIMES_NUM; ++i){
+        for (int label = 0; label < TIMES_NUM; ++label) {            
+            printf("%s,%d,%u,,FPGA\n", labels[label], sizes[i * TIMES_NUM + label], 
+                   (uint32_t)times[i * TIMES_NUM + label]);
+        }
+    }
+    #else 
+        printf("Results printing is disabled. Define PRINT_RESULTS to enable it.\n");
+    #endif
+}
 
 int main(int argc, char const *argv[]){
     printf("Starting code compiled at %s %s\n", __DATE__, __TIME__);
-    uint64_t* times = (uint64_t*)argv;
-    const int B_M = 2;
-    const int B_N = 3;
-    const int B_K = 4;
+
     const uint32_t signCmp = 48;
 
-    const int M = B_M * BINARY_FRAG_SIZE;
-    const int N = B_N * BINARY_FRAG_SIZE;
-    const int K = B_K * BINARY_FRAG_SIZE;
+    const int N = 256;
+    const int I_SIZE = N * (N / 32) * 4;
+    const int W_SIZE = N * (N / 32) * 4;
+    const int O_SIZE = N * (N / 32) * 4;
+    const int TOTAL_SIZE = I_SIZE + W_SIZE + O_SIZE;
+
+    int bn = 0;
+
+    for(int i = 0, n = 32; i < ITERATIONS; ++i, n *= 2){
+        bn = n / 32;
     
-    timerSetMode(Timer0RegFile, CONTINUOUS);
-    timerSetCounter(Timer0RegFile, 0);
-    timerStart(Timer0RegFile);
- 
-    BinaryMatrix_t A = (BinaryMatrix_t)malloc(M * (N / 32) * sizeof(uint32_t));         //768 byte
-    BinaryMatrix_t W = (BinaryMatrix_t)malloc(N * (K / 32) * sizeof(uint32_t));         // 1.536 kB
-    BinaryMatrix_t O = (BinaryMatrix_t)malloc(M * (K / 32) * sizeof(uint32_t));         // 1 kB
-    BinaryMatrix_t OSerial = (BinaryMatrix_t)malloc(M * (K / 32) * sizeof(uint32_t));   // 1 kB
+        timerSetMode(Timer0RegFile, CONTINUOUS);
+        timerSetCounter(Timer0RegFile, 0);
+        timerStart(Timer0RegFile);
 
-    times[timesIndex++] = timerGetCounter(Timer0RegFile);
+    
+        BinaryMatrix_t A = (BinaryMatrix_t)malloc(n * (n / 32) * sizeof(uint32_t));         //768 byte
+        BinaryMatrix_t W = (BinaryMatrix_t)malloc(n * (n / 32) * sizeof(uint32_t));         // 1.536 kB
+        BinaryMatrix_t O = (BinaryMatrix_t)malloc(n * (n / 32) * sizeof(uint32_t));         // 1 kB
+        BinaryMatrix_t OSerial = (BinaryMatrix_t)malloc(n * (n / 32) * sizeof(uint32_t));   // 1 kB
 
-    if(!A || !W || !O || !OSerial){
-        PRINTF_ERR("Memory allocation failed!\n");
-        while(1);
+        sizes[timesIndex] = n;
+        times[timesIndex++] = timerGetCounter(Timer0RegFile);
+
+        if(!A || !W || !O || !OSerial){
+            PRINTF_ERR("[ERROR]: Memory allocation failed -> N: %d\n", n);
+            PRINTF_ERR("A: %p, W: %p, O: %p, OSerial: %p\n", A, W, O, OSerial);
+            printResults();
+            PRINTF_ERR("Exiting...\n");
+            while(1);
+        }
+
+        ++testN;
+
+        PRINTF_DBG("Memory allocation successful!\n");
+
+        PRINTF_DBG("\nInitializing matrices...\n");
+        for(int i = 0; i < n * (n / 32); ++i){
+            A[i] = i + 1;
+        }
+        for(int i = 0; i < n * (n / 32); ++i){
+            W[i] = i;
+        }
+        memset(O, 0, n * (n / 32) * sizeof(uint32_t));
+        memset(OSerial, 0, n * (n / 32) * sizeof(uint32_t));
+
+        sizes[timesIndex] = n;
+        times[timesIndex++] = timerGetCounter(Timer0RegFile);
+
+        PRINTF_DBG("\nMatrice A:\n");
+        PROFILING_ENV_EXCLUSION(printIntBMatrixN(A, 2, 2, n, n);)
+
+        PRINTF_DBG("\nMatrice W:\n");
+        PROFILING_ENV_EXCLUSION(printIntBMatrixN(W, 2, 2, n, n);)
+
+        PRINTF_DBG("\nMatrice O (inizializzata a zero):\n");
+        PROFILING_ENV_EXCLUSION(printIntBMatrixN(O, 2, 2, n, n);)
+
+
+        PRINTF_DBG("\nLoading matices to BTPU fragments...\n");
+        loadBinaryMatrixToFragments(A, BTPU0_IO0_MEMORY, n, n);
+        loadBinaryMatrixToFragments(W, BTPU0_W_MEMORY, n, n);
+
+        sizes[timesIndex] = n;
+        times[timesIndex++] = timerGetCounter(Timer0RegFile);
+
+        btpuSetBlocks(BTPU0RegFile, bn, bn, bn);
+        btpuSetAddrs(BTPU0RegFile, 0, 0, bn * bn); 
+
+        sizes[timesIndex] = n;
+        times[timesIndex++] = timerGetCounter(Timer0RegFile);
+
+        PRINTF_DBG("\nStarting first multiplication...\n");
+        btpuStartBinaryMatrixMul(BTPU0RegFile, signCmp, true, true, BTPU_USE_MEMORY_0_CONFIG);
+
+        sizes[timesIndex] = n;
+        times[timesIndex++] = timerGetCounter(Timer0RegFile);
+
+        btpuWaitBinaryMatrixMul(BTPU0RegFile);
+
+        sizes[timesIndex] = n;
+        times[timesIndex++] = timerGetCounter(Timer0RegFile);
+
+        storeFramentsToBinaryMatrix(BTPU0_IO1_MEMORY + (bn * bn), O, n, n);
+
+        sizes[timesIndex] = n;
+        times[timesIndex++] = timerGetCounter(Timer0RegFile);
+
+        fastBinaryMatrixMul(A, W, OSerial, signCmp, n, n, n);
+
+        sizes[timesIndex] = n;
+        times[timesIndex++] = timerGetCounter(Timer0RegFile);
+
+
+        free(A);
+        free(W);
+        free(O);
+        free(OSerial);
+
+        sizes[timesIndex] = n;
+        times[timesIndex++] = timerGetCounter(Timer0RegFile);
+        timerStop(Timer0RegFile);
+
     }
-
-    PRINTF_DBG("Memory allocation successful!\n");
-
-    PRINTF_DBG("\nInitializing matrices...\n");
-    for(int i = 0; i < M * (N / 32); ++i){
-        A[i] = i + 1;
-    }
-    for(int i = 0; i < N * (K / 32); ++i){
-        W[i] = i;
-    }
-    memset(O, 0, M * (K / 32) * sizeof(uint32_t));
-
-    times[timesIndex++] = timerGetCounter(Timer0RegFile);
-
-    PRINTF_DBG("\nMatrice A:\n");
-    PROFILING_ENV_EXCLUSION(printIntBMatrixN(A, 2, 2, M, N);)
-
-    PRINTF_DBG("\nMatrice W:\n");
-    PROFILING_ENV_EXCLUSION(printIntBMatrixN(W, 2, 2, N, K);)
-
-    PRINTF_DBG("\nMatrice O (inizializzata a zero):\n");
-    PROFILING_ENV_EXCLUSION(printIntBMatrixN(O, 2, 2, M, K);)
-
-
-    PRINTF_DBG("\nLoading matices to BTPU fragments...\n");
-    loadBinaryMatrixToFragments(A, BTPU0_IO0_MEMORY, M, N);
-    loadBinaryMatrixToFragments(W, BTPU0_W_MEMORY, N, K);
-
-    times[timesIndex++] = timerGetCounter(Timer0RegFile);
-
-    btpuSetBlocks(BTPU0RegFile, B_M, B_N, B_K);
-    btpuSetAddrs(BTPU0RegFile, 0, 0, B_N * B_K); 
-
-    times[timesIndex++] = timerGetCounter(Timer0RegFile);
-
-    PRINTF_DBG("\nStarting first multiplication...\n");
-    btpuStartBinaryMatrixMul(BTPU0RegFile, signCmp, true, true, BTPU_USE_MEMORY_0_CONFIG);
-
-    times[timesIndex++] = timerGetCounter(Timer0RegFile);
-
-    btpuWaitBinaryMatrixMul(BTPU0RegFile);
-
-    times[timesIndex++] = timerGetCounter(Timer0RegFile);
-
-    storeFramentsToBinaryMatrix(BTPU0_IO1_MEMORY + (B_N * B_K), O, M, K);
-
-    times[timesIndex++] = timerGetCounter(Timer0RegFile);
-
-    fastBinaryMatrixMul(A, W, OSerial, signCmp, M, N, K);
-
-    times[timesIndex++] = timerGetCounter(Timer0RegFile);
-
-
-    free(A);
-    free(W);
-    free(O);
-    free(OSerial);
-
-    times[timesIndex++] = timerGetCounter(Timer0RegFile);
     
 
-    PRINTF_LOG("\nExecution terminated.\n");
-    if(timesIndex > TIMES_NUM){
-        PRINTF_ERR("Error: Too many time measurements taken (%d > %d)\n", timesIndex, TIMES_NUM);
-        while(1);
-    }
+    PRINTF_LOG("\nAll tests completed!\n");
+    PRINTF_LOG("\nPrinting results:\n");
+    printResults();   
 
-    // PRINTF_LOG("Label,TimerVal,UM,elapsedTime,tiks\n");
-    // for (int i = 0; i < TIMES_NUM; ++i){
-    //     PRINTF_LOG("%s,%u,tiks,%u,tiks\n", labels[i], times[i], i > 0 ? (times[i] - times[i - 1]) : times[i]);
-    // }
-    uint32_t* memBase = (uint32_t*)0x40010000;
-    memBase[0] = timesIndex;
-
-    PRINTF_DBG("Setting BRAM Port to EXTERNAL...\n");
+    PRINTF_LOG("Setting BRAM Port to EXTERNAL...\n");
     BTPU0RegFile->creg.reg.BRAM_PORT_SEL = BTPU_BRAM_PORT_SEL_EXT; // Set BRAM port to external
 
-    PRINTF_DBG("Trap CPU...\n");
+    PRINTF_LOG("Trap CPU...\n");
     while(1);
 
     return 0;
