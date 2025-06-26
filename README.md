@@ -1,4 +1,7 @@
-# RISC-V Template Project
+# Uso della BTPU (Binary Tensor Processing Unit) e misura delle prestazioni
+Lo scopo di questo progetto è di investigare le prestazioni della BTPU implementata in questa CPU, confrontandola con le prestazioni del codice seriale eseguito dalla CPU stessa.
+
+I dati vendono stampati in formato CSV via Seriale e la dimensione varia da $2^5 \times 2^5$ a $2^8 \times 2^8$.
 
 ## Struttura del progetto
 ```
