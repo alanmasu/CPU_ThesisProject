@@ -62,11 +62,11 @@ char labels[TIMES_NUM][25] = {
 
 void printResults(){
     #ifdef PRINT_RESULTS
-    printf("Label,size(bit),timestamp(tiks),timestamp(us),platform\n");
+    printf("Label,size(bit),timestamp(us),platform\n");
     for(int i = 0; i < timesIndex / TIMES_NUM; ++i){
         for (int label = 0; label < TIMES_NUM; ++label) {            
-            printf("%s,%d,%u,,FPGA\n", labels[label], sizes[i * TIMES_NUM + label], 
-                   (uint32_t)times[i * TIMES_NUM + label]);
+            printf("%s,%d,%u,FPGA\n", labels[label], sizes[i * TIMES_NUM + label], 
+                   (uint32_t)(times[i * TIMES_NUM + label]/40));
         }
     }
     #else 
