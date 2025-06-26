@@ -42,7 +42,8 @@
 #define TIMES_NUM 9
 
 uint64_t times[TIMES_NUM * ITERATIONS] = {0};
-uint32_t sizes[TIMES_NUM * ITERATIONS] = {0};
+uint32_t sizes[ITERATIONS] = {0};
+uint32_t sizeIndex = 0;
 uint32_t timesIndex = 0;
 uint32_t testN = 0;
 
@@ -62,12 +63,26 @@ char labels[TIMES_NUM][25] = {
 
 void printResults(){
     #ifdef PRINT_RESULTS
-    printf("Label,size(bit),timestamp(us),platform\n");
-    for(int i = 0; i < timesIndex / TIMES_NUM; ++i){
-        for (int label = 0; label < TIMES_NUM; ++label) {            
-            printf("%s,%d,%u,FPGA\n", labels[label], sizes[i * TIMES_NUM + label], 
-                   (uint32_t)(times[i * TIMES_NUM + label]/40));
+    printf("size(bit),");
+    for(int label = 0; label < TIMES_NUM - 1; ++label){
+        printf("%s,", labels[label]);
+    }
+    printf("%s,platform\n", labels[TIMES_NUM - 1]);
+    
+
+    uint64_t toPrint = 0;
+    for(int size = 0; size < sizeIndex; ++size){
+        printf("%d,", sizes[size]);
+        for (int time = 0; time < TIMES_NUM - 1; ++time) {
+            if(time == 0){
+                toPrint = times[size * TIMES_NUM + time];
+            } else {
+                toPrint = times[size * TIMES_NUM + time] - times[size * TIMES_NUM + time - 1];
+            }
+            printf("%u,", (uint32_t)(toPrint / 40)); // Convert to microseconds
         }
+        toPrint = times[size * TIMES_NUM + TIMES_NUM - 1] - times[size * TIMES_NUM + TIMES_NUM - 2];
+        printf("%u,FPGA\n", (uint32_t)(toPrint / 40));
     }
     #else 
         printf("Results printing is disabled. Define PRINT_RESULTS to enable it.\n");
@@ -89,18 +104,16 @@ int main(int argc, char const *argv[]){
 
     for(int i = 0, n = 32; i < ITERATIONS; ++i, n *= 2){
         bn = n / 32;
-    
+
         timerSetMode(Timer0RegFile, CONTINUOUS);
         timerSetCounter(Timer0RegFile, 0);
         timerStart(Timer0RegFile);
 
-    
         BinaryMatrix_t A = (BinaryMatrix_t)malloc(n * (n / 32) * sizeof(uint32_t));         //768 byte
         BinaryMatrix_t W = (BinaryMatrix_t)malloc(n * (n / 32) * sizeof(uint32_t));         // 1.536 kB
         BinaryMatrix_t O = (BinaryMatrix_t)malloc(n * (n / 32) * sizeof(uint32_t));         // 1 kB
         BinaryMatrix_t OSerial = (BinaryMatrix_t)malloc(n * (n / 32) * sizeof(uint32_t));   // 1 kB
 
-        sizes[timesIndex] = n;
         times[timesIndex++] = timerGetCounter(Timer0RegFile);
 
         if(!A || !W || !O || !OSerial){
@@ -110,7 +123,7 @@ int main(int argc, char const *argv[]){
             PRINTF_ERR("Exiting...\n");
             while(1);
         }
-
+        sizes[sizeIndex++] = n;
         ++testN;
 
         PRINTF_DBG("Memory allocation successful!\n");
@@ -125,7 +138,6 @@ int main(int argc, char const *argv[]){
         memset(O, 0, n * (n / 32) * sizeof(uint32_t));
         memset(OSerial, 0, n * (n / 32) * sizeof(uint32_t));
 
-        sizes[timesIndex] = n;
         times[timesIndex++] = timerGetCounter(Timer0RegFile);
 
         PRINTF_DBG("\nMatrice A:\n");
@@ -142,34 +154,28 @@ int main(int argc, char const *argv[]){
         loadBinaryMatrixToFragments(A, BTPU0_IO0_MEMORY, n, n);
         loadBinaryMatrixToFragments(W, BTPU0_W_MEMORY, n, n);
 
-        sizes[timesIndex] = n;
         times[timesIndex++] = timerGetCounter(Timer0RegFile);
 
         btpuSetBlocks(BTPU0RegFile, bn, bn, bn);
         btpuSetAddrs(BTPU0RegFile, 0, 0, bn * bn); 
 
-        sizes[timesIndex] = n;
         times[timesIndex++] = timerGetCounter(Timer0RegFile);
 
         PRINTF_DBG("\nStarting first multiplication...\n");
         btpuStartBinaryMatrixMul(BTPU0RegFile, signCmp, true, true, BTPU_USE_MEMORY_0_CONFIG);
 
-        sizes[timesIndex] = n;
         times[timesIndex++] = timerGetCounter(Timer0RegFile);
 
         btpuWaitBinaryMatrixMul(BTPU0RegFile);
 
-        sizes[timesIndex] = n;
         times[timesIndex++] = timerGetCounter(Timer0RegFile);
 
         storeFramentsToBinaryMatrix(BTPU0_IO1_MEMORY + (bn * bn), O, n, n);
 
-        sizes[timesIndex] = n;
         times[timesIndex++] = timerGetCounter(Timer0RegFile);
 
         fastBinaryMatrixMul(A, W, OSerial, signCmp, n, n, n);
 
-        sizes[timesIndex] = n;
         times[timesIndex++] = timerGetCounter(Timer0RegFile);
 
 
@@ -178,7 +184,6 @@ int main(int argc, char const *argv[]){
         free(O);
         free(OSerial);
 
-        sizes[timesIndex] = n;
         times[timesIndex++] = timerGetCounter(Timer0RegFile);
         timerStop(Timer0RegFile);
 
