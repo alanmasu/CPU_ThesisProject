@@ -49,6 +49,15 @@ while getopts "ctTsSf:" opt; do
     esac
 done
 
+# Cotrolla se il file 'libraries/BinaryMatMul/include/BinaryMatMulConfig.h' esiste, altrimenti crea il file
+if [ ! -f "libraries/BinaryMatMul/include/BinaryMatMulConfig.h" ]; then
+    echo "Creating BinaryMatMulConfig.h file..."
+    echo "#pragma once" > libraries/BinaryMatMul/include/BinaryMatMulConfig.h
+    echo "// Header creato automaticamente" >> libraries/BinaryMatMul/include/BinaryMatMulConfig.h
+    echo "#define MATH_COMPUTE" >> libraries/BinaryMatMul/include/BinaryMatMulConfig.h
+    echo "#define TRANSPOSE_COMPUTE" >> libraries/BinaryMatMul/include/BinaryMatMulConfig.h
+fi
+
 # Exporting BTPU test programs files to CPU Testbench folder
 if [ "$SIMULATION" -eq 1 ]; then  
     if [ "$SIMULATION_PREV" -eq 0 ]; then

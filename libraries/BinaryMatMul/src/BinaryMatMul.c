@@ -1,4 +1,4 @@
-#include "BinaryMatMul.h"
+#include <BinaryMatMul.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -72,7 +72,11 @@ uint32_t binaryMul(const uint32_t a, const uint32_t b) {
 void binaryBlockMatrixMul(const BinaryFragment_t a, const BinaryFragment_t b, BinaryAcc_t acc) {
     for (int row = 0; row < BINARY_FRAG_SIZE; ++row) {
         for (int col = 0; col < BINARY_FRAG_SIZE; ++col) {
-            acc[row][col] += binaryMul(a[row], b[col]);
+            // #ifdef MATH_COMPUTE 
+                acc[row][col] += binaryMul(a[row], b[col]);
+            // #else
+            //     // ++acc[row][col];
+            // #endif
         }
     }
 }
@@ -80,15 +84,21 @@ void binaryBlockMatrixMul(const BinaryFragment_t a, const BinaryFragment_t b, Bi
 void fastBinaryBlockMatrixMul(const BinaryFragment_t a, const BinaryFragment_t b, BinaryAcc_t acc, BinaryFragment_t c, uint32_t signCmp, bool store) {
     for (int row = 0; row < BINARY_FRAG_SIZE; ++row) {
         for (int col = 0; col < BINARY_FRAG_SIZE; ++col) {
-            acc[row][col] += binaryMul(a[row], b[col]);
-            if (store){
-                // Binarizza il risultato e lo memorizza in c
-                if (acc[row][col] > signCmp) {
-                    setBit(c, row, col, 1, BINARY_FRAG_SIZE);
-                } else {
-                    setBit(c, row, col, 0, BINARY_FRAG_SIZE);
+            #ifdef MATH_COMPUTE 
+                acc[row][col] += binaryMul(a[row], b[col]);
+                if (store){
+                    // Binarizza il risultato e lo memorizza in c
+                    if (acc[row][col] > signCmp) {
+                        setBit(c, row, col, 1, BINARY_FRAG_SIZE);
+                    } else {
+                        setBit(c, row, col, 0, BINARY_FRAG_SIZE);
+                    }
                 }
-            }
+            #else
+                __asm__(
+                    "nop \n\t" // Operazione di placeholder per evitare ottimizzazioni
+                );
+            #endif
         }
     }
 }
@@ -103,7 +113,6 @@ void loadFragment(BinaryFragment_t frag, const BinaryMatrix_t mat, uint32_t bloc
         frag[i] = mat[wordRow];
         wordRow += cols;
     }
-    // printf("\n");
 }    
 
 void storeFragment(const BinaryFragment_t frag, BinaryMatrix_t mat, uint32_t blockRow, uint32_t blockCol, uint32_t n) {
@@ -172,7 +181,9 @@ void fastBinaryMatrixMul(const BinaryMatrix_t a, const BinaryMatrix_t b, BinaryM
             for (int i = 0; i < blockN; ++i) {
                 loadFragment(a_frag, a, blockRow, i, n);
                 loadFragment(b_frag, b, i, blockCol, k);
-                transposeBinaryFragment(b_frag, b_transposed);
+                #ifdef TRANSPOSE_COMPUTE
+                    transposeBinaryFragment(b_frag, b_transposed);
+                #endif
                 fastBinaryBlockMatrixMul(a_frag, b_transposed, acc, c_frag, signCmp, i == blockN - 1);
             }
             storeFragment(c_frag, c, blockRow, blockCol, k);

@@ -15,6 +15,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include "BinaryMatMulConfig.h"
 
 #define BINARY_FRAG_SIZE 32
 

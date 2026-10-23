@@ -67,7 +67,7 @@ void printResults(){
     for(int label = 0; label < TIMES_NUM - 1; ++label){
         printf("%s,", labels[label]);
     }
-    printf("%s,platform\n", labels[TIMES_NUM - 1]);
+    printf("%s,transposeTime,computeTime,platform\n", labels[TIMES_NUM - 1]);
     
 
     uint64_t toPrint = 0;
@@ -82,7 +82,15 @@ void printResults(){
             printf("%u,", (uint32_t)(toPrint / 40)); // Convert to microseconds
         }
         toPrint = times[size * TIMES_NUM + TIMES_NUM - 1] - times[size * TIMES_NUM + TIMES_NUM - 2];
-        printf("%u,FPGA\n", (uint32_t)(toPrint / 40));
+        #if  defined(MATH_COMPUTE) && defined(TRANSPOSE_COMPUTE)
+            printf("%u,0,0,FPGA\n", toPrint);
+        #elif !defined(MATH_COMPUTE) && defined(TRANSPOSE_COMPUTE) 
+            printf("%u,0,0,FPGA-NOMATH\n", toPrint);
+        #elif !defined(TRANSPOSE_COMPUTE) && defined(MATH_COMPUTE)
+            printf("%u,0,0,FPGA-NOTRANSPOSE\n", toPrint);
+        #else
+            printf("%u,0,0,FPGA-ONLYMEMORY\n", toPrint);
+        #endif
     }
     #else 
         printf("Results printing is disabled. Define PRINT_RESULTS to enable it.\n");
